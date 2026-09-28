@@ -45,7 +45,7 @@ Tasks:
 - DELETE /api/tasks/<id>
 - PATCH /api/tasks/<id>/complete
 
-The complete request/response contract is documented in docs/API_CONTRACT.md.
+Project documentation is maintained in docs/README.md, with dedicated documents for the API contract, database design, architecture, frontend, testing, deployment, and product scope.
 
 ## Project structure
 
