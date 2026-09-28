@@ -2,7 +2,7 @@
 
 ## MVP Database Decisions
 
-This document defines the database model before CRUD implementation.
+This document defines the database model used by the Flask API.
 
 ### Database
 
@@ -19,6 +19,8 @@ This document defines the database model before CRUD implementation.
 | id | UUID | Primary key |
 | email | VARCHAR(255) | Required, unique, normalized to lowercase |
 | password_hash | TEXT | Required; only the hash is stored |
+| username | VARCHAR(100) | Required, unique |
+| fullname | VARCHAR(255) | Required |
 | status | constrained value | `active` or `suspended` |
 | created_at | TIMESTAMPTZ | Required |
 | updated_at | TIMESTAMPTZ | Required |
@@ -35,17 +37,17 @@ Soft-deleted users are not represented by a separate status. `deleted_at` handle
 | id | UUID | Primary key |
 | user_id | UUID | Required foreign key to User |
 | title | VARCHAR(255) | Required |
-| description | TEXT | Nullable |
+| description | TEXT | Nullable; API maximum 5000 characters |
 | completed | BOOLEAN | Required, defaults to `false` |
-| due_at | TIMESTAMPTZ | Nullable |
-| category | VARCHAR(100) | Nullable |
+| due_at | TIMESTAMPTZ | Nullable; API rejects past values |
+| category | VARCHAR(100) | Nullable; free-form text |
 | created_at | TIMESTAMPTZ | Required |
 | updated_at | TIMESTAMPTZ | Required |
 | deleted_at | TIMESTAMPTZ | Nullable; soft deletion |
 
-Priority is intentionally excluded from the MVP. It can be introduced later through a migration when team/task-assignment requirements justify it.
+Priority is intentionally excluded from the MVP.
 
-Category remains a simple field on Task for the MVP rather than a separate Category entity.
+Category remains a simple field on Task rather than a separate Category entity.
 
 ## Relationship
 
@@ -67,7 +69,11 @@ Deleting a User permanently deletes all associated Tasks. This is intentionally 
 email UNIQUE NOT NULL
 ```
 
-Application logic normalizes emails to lowercase before persistence.
+Application logic normalizes emails to lowercase before lookup and persistence.
+
+### Username
+
+Username is required and unique.
 
 ### Task ownership
 
@@ -91,7 +97,7 @@ title VARCHAR(255) NOT NULL
 
 Active tasks belonging to the same user cannot have duplicate titles.
 
-Because Tasks use soft deletion, the eventual PostgreSQL uniqueness constraint should enforce uniqueness only for active records, rather than preventing a restored/recreated title because of a deleted record.
+Because Tasks use soft deletion, PostgreSQL should enforce title uniqueness only where `deleted_at IS NULL`.
 
 ### Due date
 
@@ -99,21 +105,17 @@ Because Tasks use soft deletion, the eventual PostgreSQL uniqueness constraint s
 due_at TIMESTAMPTZ NULL
 ```
 
-The due date is optional. Application validation should reject a due timestamp in the past.
-
-The database stores the timestamp; the API/frontend decides whether the user supplied a date only or a date and time.
+The due date is optional. API validation rejects a due timestamp in the past.
 
 ### Soft deletion
 
-Both Users and Tasks support soft deletion:
+Both Users and Tasks support:
 
 ```
 deleted_at TIMESTAMPTZ NULL
 ```
 
-Normal application queries should exclude records where `deleted_at IS NOT NULL`.
-
-Deleted Tasks may be restored during the retention period. A later cleanup process may permanently purge them.
+Normal application queries exclude records where `deleted_at IS NOT NULL`.
 
 ## Timestamps
 
@@ -123,13 +125,14 @@ All entities use:
 - `updated_at`: last modification timestamp
 - `deleted_at`: nullable soft-deletion timestamp where applicable
 
-The implementation should ensure `updated_at` changes when a record is updated.
+The implementation updates `updated_at` when a record changes.
 
 ## Indexing
 
-Initial indexes should support expected MVP access patterns:
+Initial indexes support:
 
 - User email lookup
+- Username lookup
 - Tasks by user
 - Active tasks by user
 - Due-date filtering/sorting
@@ -138,8 +141,6 @@ Initial indexes should support expected MVP access patterns:
 Indexes should be added deliberately rather than indiscriminately.
 
 ## Deferred Features
-
-These are intentionally outside the initial database model:
 
 - Email verification
 - Password reset tokens
@@ -150,7 +151,7 @@ These are intentionally outside the initial database model:
 - Advanced roles/permissions
 - Audit/event history
 
-These should be introduced through migrations when the product requirements justify them.
+These should be introduced through migrations when requirements justify them.
 
 ## Implementation Order
 
@@ -158,8 +159,9 @@ These should be introduced through migrations when the product requirements just
 2. Add UUID generation.
 3. Add constraints and indexes.
 4. Add timestamp update mechanism.
-5. Create migration.
-6. Build Flask models against the schema.
-7. Add authentication.
+5. Add migrations.
+6. Build Flask models.
+7. Add session-based authentication.
 8. Build CRUD endpoints.
 9. Add tests.
+10. Connect the React frontend to the API contract.
