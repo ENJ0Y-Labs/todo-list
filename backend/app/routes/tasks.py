@@ -171,6 +171,9 @@ def list_tasks():
 @require_auth
 def create_task():
     data = _task_payload(required_title=True)
+    # Ownership is always derived from the authenticated session. Ignore a
+    # client-supplied user_id instead of allowing it to affect task ownership.
+    data.pop("user_id", None)
     unexpected = set(data) - CREATE_ALLOWED_FIELDS
     if unexpected:
         raise ApiError(
