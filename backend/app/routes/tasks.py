@@ -173,7 +173,9 @@ def create_task():
     data = _task_payload(required_title=True)
     # Ownership is always derived from the authenticated session. Ignore a
     # client-supplied user_id instead of allowing it to affect task ownership.
-    data.pop("user_id", None)
+    # Remove it before checking the create allowlist so it can never trigger
+    # validation merely because the client included the field.
+    data = {key: value for key, value in data.items() if key != "user_id"}
     unexpected = set(data) - CREATE_ALLOWED_FIELDS
     if unexpected:
         raise ApiError(
