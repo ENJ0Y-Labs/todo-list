@@ -3,6 +3,8 @@
 import uuid
 from datetime import datetime, timezone
 
+from sqlalchemy import CheckConstraint
+
 from .extensions import db
 
 
@@ -30,6 +32,10 @@ class User(db.Model):
         "Task",
         back_populates="user",
         cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        CheckConstraint("status IN ('active', 'suspended')", name="ck_users_status"),
     )
 
 
