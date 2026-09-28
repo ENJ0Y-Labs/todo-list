@@ -90,6 +90,13 @@ Backend:
 
 Set the variables in .env before running the backend. The backend expects PostgreSQL.
 
+To run the backend API tests locally, create a PostgreSQL database and set TEST_DATABASE_URL, then run:
+
+  cd backend
+  python -m pytest -q
+
+The test suite intentionally uses PostgreSQL and does not fall back to SQLite.
+
 The frontend API client uses credentials: include so the browser sends the server-side session cookie.
 
 ## Development workflow
@@ -102,9 +109,9 @@ The frontend API client uses credentials: include so the browser sends the serve
 
 ## Status
 
-Stage: API contract + backend endpoint implementation
+Stage: API contract + backend endpoint implementation + PostgreSQL API test baseline
 
-Next milestone: database migrations, automated API tests, and frontend integration.
+Next milestone: database migrations and frontend integration.
 
 ## License
 

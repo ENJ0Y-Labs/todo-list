@@ -36,6 +36,9 @@ def test_task_crud_lifecycle(client, app):
     task = created.json["task"]
     task_id = task["id"]
     assert task["completed"] is False
+    assert task["description"] == "Review blueprints"
+    assert task["category"] == "School"
+    assert task["due_at"] is not None
 
     fetched = client.get(f"/api/tasks/{task_id}")
     assert fetched.status_code == 200
@@ -48,6 +51,7 @@ def test_task_crud_lifecycle(client, app):
     assert updated.status_code == 200
     assert updated.json["task"]["title"] == "Study Flask API"
     assert updated.json["task"]["category"] == "Backend"
+    assert updated.json["task"]["completed"] is False
 
     completed = client.patch(
         f"/api/tasks/{task_id}/complete",
@@ -97,6 +101,7 @@ def test_create_always_sets_completed_false(client):
     )
 
     assert response.status_code == 400
+    assert response.json["error"]["code"] == "VALIDATION_ERROR"
 
 
 def test_patch_empty_body_is_rejected(client):
@@ -202,8 +207,47 @@ def test_completion_filter_and_pagination(client):
 
     assert completed.status_code == 200
     assert len(completed.json["tasks"]) == 1
-    assert completed.json["pagination"]["total"] == 1
-    assert completed.json["pagination"]["total_pages"] == 1
+    assert completed.json["pagination"] == {
+        "page": 1,
+        "per_page": 1,
+        "total": 1,
+        "total_pages": 1,
+    }
+
+
+def test_pagination_splits_results_and_reports_total(client):
+    assert register(client).status_code == 201
+    for index in range(5):
+        assert client.post("/api/tasks", json={"title": f"Task {index}"}).status_code == 201
+
+    first = client.get("/api/tasks", query_string={"page": 1, "per_page": 2, "sort": "title", "order": "asc"})
+    second = client.get("/api/tasks", query_string={"page": 2, "per_page": 2, "sort": "title", "order": "asc"})
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert [task["title"] for task in first.json["tasks"]] == ["Task 0", "Task 1"]
+    assert [task["title"] for task in second.json["tasks"]] == ["Task 2", "Task 3"]
+    assert first.json["pagination"]["total"] == 5
+    assert first.json["pagination"]["total_pages"] == 3
+    assert second.json["pagination"]["page"] == 2
+
+
+def test_filter_and_pagination_validation(client):
+    assert register(client).status_code == 201
+
+    cases = [
+        {"completed": "maybe"},
+        {"page": "zero"},
+        {"page": 0},
+        {"per_page": 101},
+        {"sort": "priority"},
+        {"order": "sideways"},
+    ]
+
+    for query_string in cases:
+        response = client.get("/api/tasks", query_string=query_string)
+        assert response.status_code == 400
+        assert response.json["error"]["code"] == "VALIDATION_ERROR"
 
 
 def test_due_date_filters_and_sort_keep_undated_last(client):

@@ -1,41 +1,8 @@
+import pytest
 from sqlalchemy import select
 
 from app.extensions import db
 from app.models import Task, User
-
-
-TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
-
-
-pytestmark = pytest.mark.skipif(
-    not TEST_DATABASE_URL,
-    reason="Set TEST_DATABASE_URL to run PostgreSQL integration tests.",
-)
-
-
-@pytest.fixture()
-def app():
-    app = create_app(
-        {
-            "TESTING": True,
-            "SECRET_KEY": "test-secret",
-            "SQLALCHEMY_DATABASE_URI": TEST_DATABASE_URL,
-            "SESSION_COOKIE_SECURE": False,
-            "SESSION_COOKIE_SAMESITE": "Lax",
-        }
-    )
-
-    with app.app_context():
-        db.drop_all()
-        db.create_all()
-        yield app
-        db.session.remove()
-        db.drop_all()
-
-
-@pytest.fixture()
-def client(app):
-    return app.test_client()
 
 
 def register(client, username="jerry", email="jerry@example.com", password="strong-password"):
@@ -51,15 +18,23 @@ def register(client, username="jerry", email="jerry@example.com", password="stro
 
 
 def test_register_creates_authenticated_session_and_hashes_password(client, app):
-    response = register(client)
+    response = register(client, email="JERRY@Example.COM")
 
     assert response.status_code == 201
     assert response.json["authenticated"] is True
     assert response.json["user"]["username"] == "jerry"
+    assert response.json["user"]["email"] == "jerry@example.com"
+    assert "password_hash" not in response.json["user"]
+    assert "session" not in response.json["user"]
+
+    set_cookie = response.headers.get("Set-Cookie")
+    assert set_cookie is not None
+    assert "HttpOnly" in set_cookie
 
     with app.app_context():
         user = db.session.scalar(select(User).where(User.username == "jerry"))
         assert user is not None
+        assert user.email == "jerry@example.com"
         assert user.password_hash != "strong-password"
         assert user.password_hash.startswith(("scrypt:", "pbkdf2:"))
 
@@ -92,7 +67,7 @@ def test_duplicate_username_is_case_insensitive(client):
 
 def test_login_uses_username_case_insensitively(client):
     assert register(client).status_code == 201
-    client.post("/api/auth/logout")
+    assert client.post("/api/auth/logout").status_code == 204
 
     response = client.post(
         "/api/auth/login",
@@ -102,11 +77,13 @@ def test_login_uses_username_case_insensitively(client):
     assert response.status_code == 200
     assert response.json["authenticated"] is True
     assert response.json["user"]["username"] == "jerry"
+    assert response.json["user"]["email"] == "jerry@example.com"
+    assert "password_hash" not in response.json["user"]
 
 
 def test_login_rejects_invalid_credentials(client):
     assert register(client).status_code == 201
-    client.post("/api/auth/logout")
+    assert client.post("/api/auth/logout").status_code == 204
 
     response = client.post(
         "/api/auth/login",
@@ -119,6 +96,24 @@ def test_login_rejects_invalid_credentials(client):
 
 def test_me_requires_authentication(client):
     response = client.get("/api/auth/me")
+
+    assert response.status_code == 401
+    assert response.json["error"]["code"] == "AUTHENTICATION_REQUIRED"
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        ("get", "/api/tasks", None),
+        ("post", "/api/tasks", {"title": "Protected"}),
+        ("get", "/api/tasks/00000000-0000-0000-0000-000000000000", None),
+        ("patch", "/api/tasks/00000000-0000-0000-0000-000000000000", {"title": "Changed"}),
+        ("patch", "/api/tasks/00000000-0000-0000-0000-000000000000/complete", {"completed": True}),
+        ("delete", "/api/tasks/00000000-0000-0000-0000-000000000000", None),
+    ],
+)
+def test_protected_task_endpoints_require_authentication(client, method, path, payload):
+    response = getattr(client, method)(path, json=payload) if payload is not None else getattr(client, method)(path)
 
     assert response.status_code == 401
     assert response.json["error"]["code"] == "AUTHENTICATION_REQUIRED"
@@ -156,6 +151,9 @@ def test_cross_user_task_access_is_hidden(client, app):
     task_id = created.json["task"]["id"]
 
     assert register(attacker, username="attacker", email="attacker@example.com").status_code == 201
+    attacker_list = attacker.get("/api/tasks")
+    assert attacker_list.status_code == 200
+    assert attacker_list.json["tasks"] == []
 
     for method, path, payload in (
         ("get", f"/api/tasks/{task_id}", None),
