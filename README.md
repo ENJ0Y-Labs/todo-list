@@ -15,6 +15,7 @@ A clean, multi-user Todo application built for the HNG 15 Internship and designe
 ## MVP features
 
 - User registration, login, logout, and current-user lookup
+- Username + password login
 - Session-based authentication
 - Task CRUD
 - Explicit task completion/incompletion
