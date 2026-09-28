@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request, session
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -39,13 +40,26 @@ def _registration_data():
 def register():
     email, password, username, fullname = _registration_data()
 
-    existing = db.session.scalar(
+    existing_email = db.session.scalar(
         db.select(User).where(User.email == email, User.deleted_at.is_(None))
     )
-    if existing:
+    if existing_email:
         raise ApiError(
             "EMAIL_ALREADY_REGISTERED",
             "This email is already registered.",
+            409,
+        )
+
+    existing_username = db.session.scalar(
+        db.select(User).where(
+            func.lower(User.username) == username.lower(),
+            User.deleted_at.is_(None),
+        )
+    )
+    if existing_username:
+        raise ApiError(
+            "USERNAME_ALREADY_REGISTERED",
+            "This username is already registered.",
             409,
         )
 
@@ -61,11 +75,23 @@ def register():
         db.session.commit()
     except IntegrityError as exc:
         db.session.rollback()
-        raise ApiError(
-            "EMAIL_ALREADY_REGISTERED",
-            "This email is already registered.",
-            409,
-        ) from exc
+        constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+
+        if constraint_name == "uq_users_email":
+            raise ApiError(
+                "EMAIL_ALREADY_REGISTERED",
+                "This email is already registered.",
+                409,
+            ) from exc
+
+        if constraint_name == "uq_active_users_username_lower":
+            raise ApiError(
+                "USERNAME_ALREADY_REGISTERED",
+                "This username is already registered.",
+                409,
+            ) from exc
+
+        raise
 
     session.clear()
     session["user_id"] = str(user.id)
@@ -79,15 +105,15 @@ def register():
 @auth_bp.post("/login")
 def login():
     data = request.get_json(silent=True) or {}
-    email = data.get("email")
+    username = data.get("username")
     password = data.get("password")
 
-    if not isinstance(email, str) or not email.strip() or not isinstance(password, str) or not password:
-        raise ApiError("VALIDATION_ERROR", "Email and password are required.", 400)
+    if not isinstance(username, str) or not username.strip() or not isinstance(password, str) or not password:
+        raise ApiError("VALIDATION_ERROR", "Username and password are required.", 400)
 
     user = db.session.scalar(
         db.select(User).where(
-            User.email == email.strip().lower(),
+            func.lower(User.username) == username.strip().lower(),
             User.deleted_at.is_(None),
         )
     )
@@ -95,7 +121,7 @@ def login():
     if user is None or not check_password_hash(user.password_hash, password):
         raise ApiError(
             "INVALID_CREDENTIALS",
-            "Invalid email or password.",
+            "Invalid username or password.",
             401,
         )
 
@@ -121,14 +147,14 @@ def logout():
 @require_auth
 def me():
     return jsonify({
-        "user": serialize_user(session_user()),
+        "user": session_user(),
         "authenticated": True,
     }), 200
 
 
 def session_user():
     from flask import g
-    return g.current_user
+    return serialize_user(g.current_user)
 
 
 @auth_bp.errorhandler(ApiError)
