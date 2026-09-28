@@ -59,25 +59,29 @@ def parse_iso_datetime(value, field_name="datetime"):
 
 
 def serialize_user(user):
+    created_at = user.created_at.astimezone(timezone.utc)
+    updated_at = user.updated_at.astimezone(timezone.utc)
     return {
         "id": str(user.id),
         "email": user.email,
         "username": user.username,
         "fullname": user.fullname,
         "status": user.status,
-        "created_at": user.created_at.isoformat(),
-        "updated_at": user.updated_at.isoformat(),
+        "created_at": created_at.isoformat(),
+        "updated_at": updated_at.isoformat(),
     }
 
 
 def serialize_task(task):
+    created_at = task.created_at.astimezone(timezone.utc)
+    updated_at = task.updated_at.astimezone(timezone.utc)
     return {
         "id": str(task.id),
         "title": task.title,
         "description": task.description,
         "completed": task.completed,
-        "due_at": task.due_at.isoformat() if task.due_at else None,
+        "due_at": task.due_at.astimezone(timezone.utc).isoformat() if task.due_at else None,
         "category": task.category,
-        "created_at": task.created_at.isoformat(),
-        "updated_at": task.updated_at.isoformat(),
+        "created_at": created_at.isoformat(),
+        "updated_at": updated_at.isoformat(),
     }

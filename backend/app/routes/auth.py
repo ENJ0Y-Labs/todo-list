@@ -1,6 +1,8 @@
 from flask import Blueprint, jsonify, request, session
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
+import re
+
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from ..errors import ApiError, error_response
@@ -26,8 +28,12 @@ def _registration_data():
 
     if len(email) > 255:
         raise ApiError("VALIDATION_ERROR", "Email must not exceed 255 characters.", 400)
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        raise ApiError("VALIDATION_ERROR", "Email must be a valid email address.", 400)
     if len(password) < 8:
         raise ApiError("VALIDATION_ERROR", "Password must be at least 8 characters.", 400)
+    if len(password) > 128:
+        raise ApiError("VALIDATION_ERROR", "Password must not exceed 128 characters.", 400)
     if len(username) > 100:
         raise ApiError("VALIDATION_ERROR", "Username must not exceed 100 characters.", 400)
     if len(fullname) > 150:

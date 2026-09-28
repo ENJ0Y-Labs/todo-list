@@ -6,51 +6,32 @@ From backend:
 
 python -m pytest -q
 
-The backend tests require PostgreSQL and TEST_DATABASE_URL. They intentionally do not fall back to SQLite.
+The backend tests require PostgreSQL and TEST_DATABASE_URL. A missing TEST_DATABASE_URL is a test failure, not a skipped green run.
+
+The fixture applies backend/migrations/001_initial_schema.sql to a throwaway PostgreSQL database before each test and uses the same server-side CacheLib session backend family as the application.
 
 ## Backend test areas
 
-### Authentication
-- Registration success and validation.
-- Password length.
-- Lowercase email normalization.
-- Case-insensitive username handling.
-- Duplicate email and username handling.
-- Suspended-account rejection.
-- Immediate authentication after registration.
-- Logout.
-- Current-user lookup.
-- No password-hash exposure.
+The current suite covers:
+- registration and password hashing
+- lowercase email normalization
+- case-insensitive username handling
+- duplicate email and username handling
+- suspended-account rejection
+- immediate authentication after registration
+- logout and current-user lookup
+- protected task endpoints
+- cross-user task isolation
+- client-supplied user_id ownership protection
+- task CRUD
+- completion and incompletion
+- soft deletion and title reuse
+- duplicate active task titles
+- search, category filtering, completion filtering, pagination, and sorting
+- input allowlists and invalid pagination/filter values
+- due-date filtering and ordering
 
-### Task validation
-- Required title.
-- Title length.
-- Description length.
-- Category length.
-- Future due dates.
-- Unknown request fields.
-- Completion separation from normal task updates.
-- Boolean completion validation.
-
-### Ownership
-- Users list only their own tasks.
-- Users cannot read another user's task.
-- Users cannot update another user's task.
-- Users cannot complete another user's task.
-- Users cannot delete another user's task.
-- Client-supplied user_id cannot change task ownership.
-
-### Task behavior
-- Creation returns 201.
-- Pagination metadata.
-- Search.
-- Completion filtering.
-- Case-insensitive category filtering.
-- Due-date filtering.
-- Sorting.
-- Null due dates after dated tasks.
-- Duplicate active task titles per user.
-- Soft deletion.
+The suite also provisions the actual migration rather than using SQLAlchemy create_all, so a missing schema cannot be hidden by the test fixture.
 
 ## Frontend command
 
@@ -78,10 +59,8 @@ A green test suite is necessary, not sufficient. The implementation and contract
 
 ## CI
 
-GitHub Actions results should be treated as authoritative for the exact commit tested.
-
-Record actual results. Do not claim a test passed without running it.
+GitHub Actions runs the PostgreSQL migration, backend tests, frontend tests, and frontend production build on pushes and pull requests targeting main.
 
 ## Warnings
 
-The backend may currently emit Flask-Session deprecation warnings related to its filesystem session configuration. These warnings do not fail pytest but should be addressed before deprecated APIs are removed by dependencies.
+Dependency warnings should be treated as maintenance work, not hidden by changing test configuration.

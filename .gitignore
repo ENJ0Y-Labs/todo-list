@@ -19,6 +19,7 @@ htmlcov/
 
 # Flask / runtime
 instance/
+.flask_session/
 *.log
 
 # Environment files

@@ -25,6 +25,12 @@ function toLocalDateTime(value) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
+function toUtcISOString(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
 function formatDue(value) {
   if (!value) return null;
   const date = new Date(value);
@@ -39,20 +45,24 @@ function Summary({ label, value, icon }) {
 
 function TaskRow({ task, busy, onComplete, onEdit, onDelete }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState({
-    title: task.title,
-    description: task.description || "",
-    category: task.category || "",
-    customCategory: "",
-    due_at: toLocalDateTime(task.due_at),
+  const [draft, setDraft] = useState(() => {
+    const custom = task.category && !CATEGORIES.includes(task.category);
+    return {
+      title: task.title,
+      description: task.description || "",
+      category: custom ? "Other" : task.category || "",
+      customCategory: custom ? task.category : "",
+      due_at: toLocalDateTime(task.due_at),
+    };
   });
 
   useEffect(() => {
+    const custom = task.category && !CATEGORIES.includes(task.category);
     setDraft({
       title: task.title,
       description: task.description || "",
-      category: task.category || "",
-      customCategory: "",
+      category: custom ? "Other" : task.category || "",
+      customCategory: custom ? task.category : "",
       due_at: toLocalDateTime(task.due_at),
     });
   }, [task]);
@@ -61,12 +71,25 @@ function TaskRow({ task, busy, onComplete, onEdit, onDelete }) {
 
   async function save() {
     const category = knownCategory === "Other" ? draft.customCategory.trim() : draft.category.trim();
-    await onEdit(task.id, {
-      title: draft.title.trim(),
-      description: draft.description.trim() || null,
-      category: category || null,
-      due_at: draft.due_at ? new Date(draft.due_at).toISOString() : null,
-    });
+    const originalCategory = task.category || null;
+    const nextCategory = category || null;
+    const originalDescription = task.description || null;
+    const nextDescription = draft.description.trim() || null;
+    const originalDueAt = task.due_at ? new Date(task.due_at).toISOString() : null;
+    const nextDueAt = draft.due_at ? toUtcISOString(draft.due_at) : null;
+    const payload = {};
+
+    if (draft.title.trim() !== task.title) payload.title = draft.title.trim();
+    if (nextDescription !== originalDescription) payload.description = nextDescription;
+    if (nextCategory !== originalCategory) payload.category = nextCategory;
+    if (nextDueAt !== originalDueAt) payload.due_at = nextDueAt;
+
+    if (!Object.keys(payload).length) {
+      setEditing(false);
+      return;
+    }
+
+    await onEdit(task.id, payload);
     setEditing(false);
   }
 
@@ -95,10 +118,10 @@ function TaskRow({ task, busy, onComplete, onEdit, onDelete }) {
 
   return (
     <article className="task-card">
-      <button className="check-button" type="button" disabled={busy} onClick={() => onComplete(task.id, true)} aria-label={"Complete " + task.title}>
-        <i className="fa-regular fa-circle" />
+      <button className={"check-button" + (task.completed ? " completed" : "")} type="button" disabled={busy} onClick={() => onComplete(task.id, !task.completed)} aria-label={(task.completed ? "Reopen " : "Complete ") + task.title}>
+        <i className={task.completed ? "fa-solid fa-circle-check" : "fa-regular fa-circle"} />
       </button>
-      <div className="task-content">
+      <div className={"task-content" + (task.completed ? " completed" : "")}>
         <h3>{task.title}</h3>
         {task.description && <p>{task.description}</p>}
         <div className="task-meta">
@@ -186,7 +209,11 @@ export default function Dashboard() {
         order: filters.order,
       });
       ["search", "completed", "category", "due_after", "due_before"].forEach((key) => {
-        if (filters[key]) params.set(key, filters[key]);
+        if (!filters[key]) return;
+        const value = key === "due_after" || key === "due_before"
+          ? toUtcISOString(filters[key])
+          : filters[key];
+        if (value) params.set(key, value);
       });
 
       const [list, total, completed, pending] = await Promise.all([
@@ -240,13 +267,11 @@ export default function Dashboard() {
     }
   }
 
-  async function completeTask(id) {
+  async function completeTask(id, completed) {
     setBusyId(id);
     try {
-      await api.setTaskCompleted(id, true);
-      setTasks((current) => current.filter((task) => task.id !== id));
-      setSummary((current) => ({ ...current, completed: current.completed + 1, pending: Math.max(0, current.pending - 1) }));
-      notify("Task completed.", "success");
+      await api.setTaskCompleted(id, completed);
+      notify(completed ? "Task completed." : "Task reopened.", "success");
       await load();
     } catch (error) {
       notify(messageFor(error));
