@@ -16,7 +16,7 @@ This repository contains the HNG 15 Todo application MVP. Build it as a real, ma
 8. Never commit secrets, API keys, passwords, tokens, local databases, or real environment files.
 9. Use environment variables for configuration and keep `.env.example` updated.
 10. Validate external input at API boundaries and return consistent JSON responses and HTTP status codes.
-11. Hash passwords with a suitable password-hashing library. Never store plaintext passwords.
+11. Hash passwords with bcrypt. Never store plaintext passwords.
 12. Use database constraints and application validation where appropriate.
 13. Write tests for important business rules, especially authentication and authorization.
 14. Run relevant tests and checks before considering a change complete.
@@ -31,21 +31,26 @@ This repository contains the HNG 15 Todo application MVP. Build it as a real, ma
 
 React frontend → Flask REST API → SQLAlchemy → PostgreSQL/Supabase
 
-Authentication uses server-side sessions. The frontend communicates with the backend through the documented REST API.
+Authentication uses server-side sessions. The browser manages the HTTP-only session cookie. The React application must not store a session identifier in local storage or application state.
 
 ## MVP scope
 
-- User registration, login, and logout
+- User registration, login, logout, and current-user lookup
 - Session-based authentication
 - Task CRUD
-- Task completion
-- Search, filtering, and sorting
-- Priorities
+- Explicit task completion state
+- Search, filtering, sorting, and pagination
 - Due dates
-- Categories/tags
+- Categories
 - Per-user task isolation
 
-Do not add unrelated features until the MVP requirements are stable.
+Task priority is not part of the current MVP contract.
+
+## API contract
+
+The authoritative API contract is [docs/API_CONTRACT.md](docs/API_CONTRACT.md).
+
+When changing an endpoint, update the contract and tests in the same change.
 
 ## Backend rules
 
@@ -54,15 +59,20 @@ Do not add unrelated features until the MVP requirements are stable.
 - Use SQLAlchemy models for database access.
 - Avoid raw SQL unless there is a documented reason.
 - Use appropriate HTTP methods and status codes.
-- Never expose password hashes or sensitive session information.
+- Never expose password hashes or session identifiers.
 - Check authentication before protected operations.
 - Scope task queries and mutations to the authenticated user.
+- Use soft deletion for Tasks by setting `deleted_at`.
+- Return 404 for inaccessible tasks instead of revealing another user's resource.
+- Completion uses explicit `completed: true|false`, not a toggle.
+- Due dates may be null or future timestamps.
 
 ## Frontend rules
 
 - Use React components with clear responsibilities.
 - Keep API calls in the services layer.
 - Handle loading, success, and error states explicitly.
+- Send browser credentials with session-authenticated API requests.
 - Do not put secrets in frontend environment variables. Anything exposed to a browser is public.
 - Keep UI behavior predictable and accessible.
 
@@ -83,4 +93,5 @@ A change is complete when:
 - Relevant tests pass.
 - No secrets or generated junk are committed.
 - Documentation is updated when behavior or setup changes.
+- The API contract matches the implementation.
 - The diff is focused and understandable.
