@@ -1,4 +1,4 @@
-from datetime import timezone
+from datetime import datetime, timezone
 
 from flask import Blueprint, g, jsonify, request
 from sqlalchemy import asc, desc, or_
@@ -46,7 +46,6 @@ def _task_payload(required_title=False):
 
     if "due_at" in data and data["due_at"] is not None:
         due_at = parse_iso_datetime(data["due_at"], "due_at")
-        from datetime import datetime, timezone
         if due_at <= datetime.now(timezone.utc):
             raise ApiError("VALIDATION_ERROR", "due_at must be in the future.", 400)
 
