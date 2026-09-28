@@ -15,7 +15,7 @@
 |---|---|---|
 | id | UUID | Primary key |
 | email | VARCHAR(255) | Required, unique, normalized to lowercase |
-| username | VARCHAR(100) | Required |
+| username | VARCHAR(100) | Required, unique among active users, case-insensitive |
 | fullname | VARCHAR(150) | Required |
 | password_hash | TEXT | Required; only the hash is stored |
 | status | VARCHAR(20) | active or suspended |
@@ -58,6 +58,12 @@ email UNIQUE NOT NULL
 
 Application logic normalizes emails to lowercase before persistence.
 
+### User username
+
+username VARCHAR(100) NOT NULL
+
+Active usernames are unique case-insensitively. PostgreSQL enforces this with a partial unique functional index over LOWER(username) where deleted_at IS NULL.
+
 ### Task ownership
 
 user_id UUID NOT NULL
@@ -97,6 +103,7 @@ The ORM updates updated_at when a record changes.
 Indexes support:
 
 - User email lookup
+- Active username lookup
 - Tasks by user
 - Active tasks by user
 - Due-date filtering/sorting
