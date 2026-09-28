@@ -7,80 +7,86 @@ This repository contains the HNG 15 Todo application MVP. Build it as a real, ma
 ## Working rules
 
 1. Understand before changing. Inspect relevant files and existing architecture before editing.
-2. Keep the MVP focused. Do not add features outside the current milestone.
+2. Keep the MVP focused.
 3. Prefer simple, explicit solutions over clever abstractions.
-4. Follow existing structure and naming conventions.
-5. Keep backend and frontend responsibilities separate.
-6. Enforce business rules and authorization on the backend. Never trust the client for security.
-7. Every task belongs to a user. A user must never read or modify another user's tasks.
-8. Never commit secrets, API keys, passwords, tokens, local databases, or real environment files.
-9. Use environment variables for configuration and keep `.env.example` updated.
-10. Validate external input at API boundaries and return consistent JSON responses and HTTP status codes.
-11. Hash passwords with a suitable password-hashing library. Never store plaintext passwords.
-12. Use database constraints and application validation where appropriate.
-13. Write tests for important business rules, especially authentication and authorization.
-14. Run relevant tests and checks before considering a change complete.
-15. Keep commits small and meaningful. Prefer `feat:`, `fix:`, `test:`, `refactor:`, `docs:`, and `chore:`.
-16. Do not rewrite working code merely for stylistic reasons.
-17. Do not add a dependency when the standard library or an existing dependency is sufficient.
-18. Do not silently change API contracts. Update documentation and tests when contracts change.
-19. Keep documentation synchronized with implementation.
-20. If requirements are ambiguous, state the assumption before implementing it.
+4. Keep backend and frontend responsibilities separate.
+5. Enforce business rules and authorization on the backend.
+6. Every task belongs to a user and must be ownership-scoped.
+7. Never commit secrets, passwords, tokens, local databases, or real environment files.
+8. Use environment variables for configuration.
+9. Validate input at API boundaries and return consistent JSON errors.
+10. Hash passwords. Never store plaintext passwords.
+11. Use database constraints and application validation.
+12. Write tests for authentication, validation, authorization, and ownership.
+13. Run relevant tests before considering a change complete.
+14. Keep commits small and meaningful.
+15. Do not silently change API contracts. Update documentation and tests.
+16. Keep documentation synchronized with implementation.
+17. If requirements are ambiguous, state the assumption before implementing it.
 
 ## Architecture
 
-React frontend → Flask REST API → SQLAlchemy → PostgreSQL/Supabase
+React frontend -> Flask REST API -> SQLAlchemy -> PostgreSQL/Supabase
 
-Authentication uses server-side sessions. The frontend communicates with the backend through the documented REST API.
+Authentication uses server-side sessions. The browser receives an HTTP-only session cookie. The frontend does not manage a session ID in application state.
 
 ## MVP scope
 
-- User registration, login, and logout
+- User registration, login, logout, and current-user lookup
 - Session-based authentication
 - Task CRUD
-- Task completion
-- Search, filtering, and sorting
-- Priorities
+- Explicit task completion/incompletion
+- Search, filtering, sorting, and pagination
 - Due dates
-- Categories/tags
+- Free-form categories
 - Per-user task isolation
+- Soft deletion
 
-Do not add unrelated features until the MVP requirements are stable.
+Task priority is deferred and must not be added without an explicit product decision.
+
+## API contract rules
+
+- Base path is /api.
+- JSON is used for request and response bodies except 204 responses.
+- Authentication uses an HTTP-only server-side session cookie.
+- Protected endpoints require an authenticated active user.
+- User emails are normalized to lowercase.
+- Registration requires email, password, username, and fullname.
+- Registration immediately creates an authenticated session.
+- Duplicate emails return 409 EMAIL_ALREADY_REGISTERED.
+- New tasks always start with completed=false.
+- Task PATCH changes title, description, due_at, and category only.
+- Completion uses PATCH /api/tasks/<id>/complete with an explicit boolean.
+- Completion does not toggle.
+- Task deletion is soft deletion through deleted_at.
+- Task access is always scoped to the authenticated owner.
+- A task belonging to another user is exposed as 404 RESOURCE_NOT_FOUND.
+- Task listing uses pagination and documented query parameters.
+- Errors use { error: { code, message } }.
 
 ## Backend rules
 
-- Organize Flask code by clear responsibility.
-- Keep route handlers thin when business logic becomes non-trivial.
+- Organize Flask code by responsibility.
 - Use SQLAlchemy models for database access.
 - Avoid raw SQL unless there is a documented reason.
 - Use appropriate HTTP methods and status codes.
-- Never expose password hashes or sensitive session information.
+- Never expose password hashes or session identifiers.
 - Check authentication before protected operations.
-- Scope task queries and mutations to the authenticated user.
 
 ## Frontend rules
 
-- Use React components with clear responsibilities.
 - Keep API calls in the services layer.
+- Use credentials: include for authenticated API calls.
 - Handle loading, success, and error states explicitly.
-- Do not put secrets in frontend environment variables. Anything exposed to a browser is public.
-- Keep UI behavior predictable and accessible.
+- Do not put secrets in frontend environment variables.
 
 ## Git workflow
 
-- `main` is stable.
-- `dev` is the integration branch.
-- Use focused feature branches, such as `feature/auth` or `feature/tasks`.
-- Do not push unfinished experimental work directly to `main`.
+- main is stable.
+- Use focused feature branches.
+- Do not push unfinished experimental work directly to main.
 - Review the diff before committing.
 
 ## Definition of done
 
-A change is complete when:
-
-- It solves the stated requirement.
-- It follows the project architecture.
-- Relevant tests pass.
-- No secrets or generated junk are committed.
-- Documentation is updated when behavior or setup changes.
-- The diff is focused and understandable.
+A change is complete when it solves the requirement, follows the architecture, passes relevant tests, contains no secrets, updates documentation when behavior changes, and has a focused diff.
