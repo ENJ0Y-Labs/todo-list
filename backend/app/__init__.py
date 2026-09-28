@@ -58,7 +58,7 @@ def create_app(test_config=None):
 
     allowed_origins = [
         origin.strip()
-        for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+        for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:5174").split(",")
         if origin.strip()
     ]
     CORS(app, origins=allowed_origins, supports_credentials=True)
