@@ -8,7 +8,6 @@ from app.extensions import db
 
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 
-
 pytestmark = pytest.mark.skipif(
     not TEST_DATABASE_URL,
     reason="Set TEST_DATABASE_URL to run PostgreSQL integration tests.",
@@ -16,7 +15,7 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture()
-def app():
+def app(tmp_path):
     if not TEST_DATABASE_URL:
         pytest.skip("Set TEST_DATABASE_URL to run PostgreSQL integration tests.")
 
@@ -25,6 +24,8 @@ def app():
             "TESTING": True,
             "SECRET_KEY": "test-secret",
             "SQLALCHEMY_DATABASE_URI": TEST_DATABASE_URL,
+            "SESSION_TYPE": "filesystem",
+            "SESSION_FILE_DIR": str(tmp_path / "sessions"),
             "SESSION_COOKIE_SECURE": False,
             "SESSION_COOKIE_SAMESITE": "Lax",
         }
