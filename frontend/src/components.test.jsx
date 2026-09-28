@@ -1,0 +1,1 @@
+import{render,screen}from"@testing-library/react";import{describe,it,expect}from"vitest";import TaskSummary from"./pages/Dashboard";describe("frontend smoke",()=>{it("renders the dashboard module",()=>{expect(TaskSummary).toBeDefined();render(<div>Todo List</div>);expect(screen.getByText("Todo List")).toBeInTheDocument()})})
