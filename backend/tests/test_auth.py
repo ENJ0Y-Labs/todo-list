@@ -178,29 +178,13 @@ def test_cross_user_task_access_is_hidden(client, app):
         assert task.deleted_at is None
 
 
-def test_create_task_ignores_client_supplied_user_id(client, app):
+def test_create_task_rejects_client_supplied_user_id(client):
     assert register(client).status_code == 201
-
-    with app.app_context():
-        other = User(
-            email="other@example.com",
-            username="other",
-            fullname="Other User",
-            password_hash="not-used",
-        )
-        db.session.add(other)
-        db.session.commit()
-        other_id = str(other.id)
 
     response = client.post(
         "/api/tasks",
-        json={"title": "Owned by me", "user_id": other_id},
+        json={"title": "Owned by me", "user_id": "00000000-0000-0000-0000-000000000001"},
     )
 
-    assert response.status_code == 201
-    task_id = response.json["task"]["id"]
-
-    with app.app_context():
-        task = db.session.scalar(select(Task).where(Task.id == task_id))
-        current_user = db.session.scalar(select(User).where(User.username == "jerry"))
-        assert str(task.user_id) == str(current_user.id)
+    assert response.status_code == 400
+    assert response.json["error"]["code"] == "VALIDATION_ERROR"
