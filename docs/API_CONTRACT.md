@@ -27,6 +27,7 @@ Common codes:
 | 403 | ACCOUNT_SUSPENDED | Account is suspended |
 | 404 | RESOURCE_NOT_FOUND | Resource is unavailable to this user |
 | 409 | EMAIL_ALREADY_REGISTERED | Email already exists |
+| 409 | USERNAME_ALREADY_REGISTERED | Username already exists |
 | 409 | TASK_TITLE_ALREADY_EXISTS | Active task title already exists for this user |
 | 405 | METHOD_NOT_ALLOWED | HTTP method is unsupported |
 
@@ -49,11 +50,13 @@ Required fields: email, password, username, fullname.
 
 Rules:
 - Email is normalized to lowercase.
+- Username uniqueness is case-insensitive.
 - Password must be at least 8 characters.
 - Email must not exceed 255 characters.
 - Username must not exceed 100 characters.
 - Full name must not exceed 150 characters.
-- Duplicate active emails return 409.
+- Duplicate active emails return 409 EMAIL_ALREADY_REGISTERED.
+- Duplicate active usernames return 409 USERNAME_ALREADY_REGISTERED.
 - Password is hashed before storage.
 - A new server-side session is created.
 
@@ -74,12 +77,16 @@ Response: 201 Created
 
 ### POST /api/auth/login
 
+Login uses username and password only.
+
 Request:
 
 {
-  "email": "jerry@example.com",
+  "username": "jerry",
   "password": "strong-password"
 }
+
+Username matching is case-insensitive.
 
 Response: 200 OK
 
@@ -257,6 +264,14 @@ Deleted tasks are excluded from normal API queries.
 Every protected task query is scoped by the authenticated user. The API never trusts a client-supplied user_id.
 
 Password hashes and session identifiers are never returned.
+
+## Session cookie and deployment
+
+The session cookie is HTTP-only. SameSite defaults to Lax and should remain Lax when the frontend and API are deployed on the same site. Production HTTPS deployments should set SESSION_COOKIE_SECURE=true.
+
+If the frontend and API must be deployed on different sites, use SameSite=None with Secure cookies and add an explicit CSRF protection mechanism before enabling state-changing cross-site requests.
+
+The recommended deployment shape is same-site frontend/API hosting, such as app.example.com and api.example.com, rather than unrelated domains.
 
 ## Implementation order
 
