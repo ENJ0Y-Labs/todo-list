@@ -1,5 +1,7 @@
+from datetime import datetime, timezone
+
 from flask import Blueprint, g, jsonify, request
-from sqlalchemy import asc, desc, or_
+from sqlalchemy import asc, desc, func, nullslast, or_
 from sqlalchemy.exc import IntegrityError
 
 from ..errors import ApiError, error_response
@@ -10,12 +12,24 @@ from ..utils import parse_iso_datetime, require_auth, serialize_task
 tasks_bp = Blueprint("tasks", __name__)
 
 MAX_DESCRIPTION_LENGTH = 5000
+ALLOWED_TASK_FIELDS = {"title", "description", "due_at", "category"}
 
 
-def _task_payload(required_title=False):
-    data = request.get_json(silent=True) or {}
+def _task_payload(required_title=False, allowed_fields=ALLOWED_TASK_FIELDS):
+    data = request.get_json(silent=True)
+    if data is None:
+        data = {}
+
     if not isinstance(data, dict):
         raise ApiError("VALIDATION_ERROR", "Request body must be a JSON object.", 400)
+
+    unexpected = set(data) - allowed_fields
+    if unexpected:
+        raise ApiError(
+            "VALIDATION_ERROR",
+            f"Unsupported fields: {', '.join(sorted(unexpected))}.",
+            400,
+        )
 
     if required_title and (not isinstance(data.get("title"), str) or not data["title"].strip()):
         raise ApiError("VALIDATION_ERROR", "Title is required.", 400)
@@ -40,7 +54,6 @@ def _task_payload(required_title=False):
 
     if "due_at" in data and data["due_at"] is not None:
         due_at = parse_iso_datetime(data["due_at"], "due_at")
-        from datetime import datetime, timezone
         if due_at <= datetime.now(timezone.utc):
             raise ApiError("VALIDATION_ERROR", "due_at must be in the future.", 400)
 
@@ -60,14 +73,7 @@ def _get_task_or_404(task_id):
     return task
 
 
-@tasks_bp.get("")
-@require_auth
-def list_tasks():
-    query = db.select(Task).where(
-        Task.user_id == g.current_user.id,
-        Task.deleted_at.is_(None),
-    )
-
+def _apply_task_filters(query):
     search = request.args.get("search")
     if search:
         term = f"%{search.strip()}%"
@@ -87,7 +93,7 @@ def list_tasks():
 
     category = request.args.get("category")
     if category:
-        query = query.where(Task.category == category.strip())
+        query = query.where(func.lower(Task.category) == category.strip().lower())
 
     due_after = request.args.get("due_after")
     if due_after:
@@ -97,6 +103,42 @@ def list_tasks():
     if due_before:
         query = query.where(Task.due_at <= parse_iso_datetime(due_before, "due_before"))
 
+    return query
+
+
+def _is_task_title_conflict(error):
+    original = getattr(error, "orig", None)
+    diagnostic = getattr(original, "diag", None)
+    return getattr(diagnostic, "constraint_name", None) == "uq_active_task_title_per_user"
+
+
+def _commit_task(task):
+    try:
+        db.session.commit()
+    except IntegrityError as exc:
+        db.session.rollback()
+        if _is_task_title_conflict(exc):
+            raise ApiError(
+                "TASK_TITLE_ALREADY_EXISTS",
+                "An active task with this title already exists.",
+                409,
+            ) from exc
+        raise ApiError(
+            "INTERNAL_SERVER_ERROR",
+            "The task could not be saved.",
+            500,
+        ) from exc
+
+
+@tasks_bp.get("")
+@require_auth
+def list_tasks():
+    query = db.select(Task).where(
+        Task.user_id == g.current_user.id,
+        Task.deleted_at.is_(None),
+    )
+    query = _apply_task_filters(query)
+
     try:
         page = int(request.args.get("page", 1))
         per_page = int(request.args.get("per_page", 20))
@@ -104,7 +146,11 @@ def list_tasks():
         raise ApiError("VALIDATION_ERROR", "page and per_page must be integers.", 400) from exc
 
     if page < 1 or per_page < 1 or per_page > 100:
-        raise ApiError("VALIDATION_ERROR", "page must be >= 1 and per_page must be between 1 and 100.", 400)
+        raise ApiError(
+            "VALIDATION_ERROR",
+            "page must be >= 1 and per_page must be between 1 and 100.",
+            400,
+        )
 
     sort = request.args.get("sort", "created_at")
     order = request.args.get("order", "desc").lower()
@@ -121,7 +167,8 @@ def list_tasks():
         raise ApiError("VALIDATION_ERROR", "order must be asc or desc.", 400)
 
     column = sort_columns[sort]
-    query = query.order_by((asc(column) if order == "asc" else desc(column)))
+    ordered_column = asc(column) if order == "asc" else desc(column)
+    query = query.order_by(nullslast(ordered_column), asc(Task.id))
     query = query.offset((page - 1) * per_page).limit(per_page)
 
     tasks = db.session.scalars(query).all()
@@ -130,20 +177,7 @@ def list_tasks():
         Task.user_id == g.current_user.id,
         Task.deleted_at.is_(None),
     )
-    if search:
-        term = f"%{search.strip()}%"
-        count_query = count_query.where(
-            or_(Task.title.ilike(term), Task.description.ilike(term), Task.category.ilike(term))
-        )
-    if completed is not None:
-        count_query = count_query.where(Task.completed == (completed.lower() == "true"))
-    if category:
-        count_query = count_query.where(Task.category == category.strip())
-    if due_after:
-        count_query = count_query.where(Task.due_at >= parse_iso_datetime(due_after, "due_after"))
-    if due_before:
-        count_query = count_query.where(Task.due_at <= parse_iso_datetime(due_before, "due_before"))
-
+    count_query = _apply_task_filters(count_query)
     total = db.session.scalar(count_query) or 0
 
     return jsonify({
@@ -171,16 +205,7 @@ def create_task():
         category=data.get("category").strip() if isinstance(data.get("category"), str) else None,
     )
     db.session.add(task)
-
-    try:
-        db.session.commit()
-    except IntegrityError as exc:
-        db.session.rollback()
-        raise ApiError(
-            "TASK_TITLE_ALREADY_EXISTS",
-            "An active task with this title already exists.",
-            409,
-        ) from exc
+    _commit_task(task)
 
     return jsonify({"task": serialize_task(task)}), 201
 
@@ -197,14 +222,8 @@ def update_task(task_id):
     task = _get_task_or_404(task_id)
     data = _task_payload()
 
-    allowed = {"title", "description", "due_at", "category"}
-    unexpected = set(data) - allowed
-    if unexpected:
-        raise ApiError(
-            "VALIDATION_ERROR",
-            f"Unsupported fields: {', '.join(sorted(unexpected))}.",
-            400,
-        )
+    if not data:
+        raise ApiError("VALIDATION_ERROR", "At least one task field must be provided.", 400)
 
     if "title" in data:
         task.title = data["title"].strip()
@@ -215,15 +234,7 @@ def update_task(task_id):
     if "category" in data:
         task.category = data["category"].strip() if isinstance(data["category"], str) else None
 
-    try:
-        db.session.commit()
-    except IntegrityError as exc:
-        db.session.rollback()
-        raise ApiError(
-            "TASK_TITLE_ALREADY_EXISTS",
-            "An active task with this title already exists.",
-            409,
-        ) from exc
+    _commit_task(task)
 
     return jsonify({"task": serialize_task(task)}), 200
 
@@ -232,7 +243,6 @@ def update_task(task_id):
 @require_auth
 def delete_task(task_id):
     task = _get_task_or_404(task_id)
-    from datetime import datetime, timezone
     task.deleted_at = datetime.now(timezone.utc)
     db.session.commit()
     return "", 204
@@ -242,10 +252,18 @@ def delete_task(task_id):
 @require_auth
 def complete_task(task_id):
     task = _get_task_or_404(task_id)
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
 
     if not isinstance(data, dict) or not isinstance(data.get("completed"), bool):
         raise ApiError("VALIDATION_ERROR", "completed must be a boolean.", 400)
+
+    unexpected = set(data) - {"completed"}
+    if unexpected:
+        raise ApiError(
+            "VALIDATION_ERROR",
+            f"Unsupported fields: {', '.join(sorted(unexpected))}.",
+            400,
+        )
 
     task.completed = data["completed"]
     db.session.commit()
