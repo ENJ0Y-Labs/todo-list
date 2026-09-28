@@ -30,6 +30,7 @@ Common codes:
 | 409 | USERNAME_ALREADY_REGISTERED | Username already exists |
 | 409 | TASK_TITLE_ALREADY_EXISTS | Active task title already exists for this user |
 | 405 | METHOD_NOT_ALLOWED | HTTP method is unsupported |
+| 500 | INTERNAL_SERVER_ERROR | An unexpected server-side task persistence error occurred |
 
 ## Authentication
 
@@ -158,6 +159,8 @@ Rules:
 - Category may be null and is limited to 100 characters.
 - due_at may be null but cannot be in the past.
 - Active task titles must be unique per user.
+- Unsupported request fields return 400 VALIDATION_ERROR. The API does not silently ignore unknown fields.
+- Client-supplied user_id is not accepted; task ownership is always derived from the authenticated session.
 
 Response: 201 Created
 
@@ -185,7 +188,13 @@ Supported query parameters:
 | sort | title, due_at, created_at, updated_at | created_at |
 | order | asc, desc | desc |
 
-search checks title, description, and category.
+search checks title, description, and category using case-insensitive substring matching.
+
+category filtering is case-insensitive. For example, category=backend matches a task whose category is Backend.
+
+When sorting by due_at, tasks without a due date are always placed after tasks with a due date, for both ascending and descending order.
+
+PATCH /api/tasks/<id> requires at least one allowed field. An empty JSON object returns 400 VALIDATION_ERROR.
 
 Response: 200 OK
 
@@ -226,6 +235,9 @@ Not allowed:
 - completed
 - created_at
 - updated_at
+- any other field
+
+An empty PATCH body is invalid. Completion must use the dedicated completion endpoint.
 
 Completion has its own endpoint.
 
