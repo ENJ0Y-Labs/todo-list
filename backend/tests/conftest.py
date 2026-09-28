@@ -17,6 +17,9 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture()
 def app():
+    if not TEST_DATABASE_URL:
+        pytest.skip("Set TEST_DATABASE_URL to run PostgreSQL integration tests.")
+
     app = create_app(
         {
             "TESTING": True,
