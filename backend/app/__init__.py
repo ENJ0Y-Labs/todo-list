@@ -1,5 +1,6 @@
 import os
 
+from dotenv import load_dotenv
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_session import Session
@@ -7,6 +8,8 @@ from flask_session import Session
 from .extensions import db
 from .routes.auth import auth_bp
 from .routes.tasks import tasks_bp
+
+load_dotenv()
 
 
 def create_app(test_config=None):
