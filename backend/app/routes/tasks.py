@@ -1,3 +1,5 @@
+from datetime import timezone
+
 from flask import Blueprint, g, jsonify, request
 from sqlalchemy import asc, desc, or_
 from sqlalchemy.exc import IntegrityError
@@ -284,7 +286,7 @@ def complete_task(task_id):
         "task": {
             "id": str(task.id),
             "completed": task.completed,
-            "updated_at": task.updated_at.isoformat(),
+            "updated_at": task.updated_at.astimezone(timezone.utc).isoformat(),
         }
     }), 200
 
