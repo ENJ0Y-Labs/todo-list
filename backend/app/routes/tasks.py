@@ -148,7 +148,7 @@ def list_tasks():
     if completed is not None:
         count_query = count_query.where(Task.completed == (completed.lower() == "true"))
     if category:
-        count_query = count_query.where(Task.category == category.strip())
+        count_query = count_query.where(Task.category.ilike(category.strip()))
     if due_after:
         count_query = count_query.where(Task.due_at >= parse_iso_datetime(due_after, "due_after"))
     if due_before:
