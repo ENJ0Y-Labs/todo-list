@@ -346,6 +346,25 @@ def test_list_rejects_invalid_pagination_sort_and_order(client):
         assert response.json["error"]["code"] == "VALIDATION_ERROR"
 
 
+def test_suspended_account_is_blocked_from_task_endpoints(client, app):
+    assert register(client).status_code == 201
+
+    with app.app_context():
+        from app.models import User
+
+        user = db.session.scalar(select(User).where(User.username == "jerry"))
+        user.status = "suspended"
+        db.session.commit()
+
+    listed = client.get("/api/tasks")
+    assert listed.status_code == 403
+    assert listed.json["error"]["code"] == "ACCOUNT_SUSPENDED"
+
+    created = client.post("/api/tasks", json={"title": "Blocked"})
+    assert created.status_code == 403
+    assert created.json["error"]["code"] == "ACCOUNT_SUSPENDED"
+
+
 def test_task_ownership_isolation_for_list_and_mutations(client, app):
     owner = client
     attacker = app.test_client()
