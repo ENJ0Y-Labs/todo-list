@@ -1,1 +1,8 @@
-# Python dependencies will be added as backend features are implemented.
+Flask>=3.1,<4
+Flask-Cors>=6,<7
+Flask-Session>=0.8,<1
+Flask-SQLAlchemy>=3.1,<4
+psycopg[binary]>=3.2,<4
+bcrypt>=4.2,<5
+python-dotenv>=1.1,<2
+pytest>=8.3,<9
