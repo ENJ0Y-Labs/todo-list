@@ -9,20 +9,22 @@ A clean, multi-user Todo application built for the HNG 15 Internship and designe
 - API: REST + JSON
 - ORM: SQLAlchemy
 - Database: PostgreSQL via Supabase
-- Authentication: Server-side sessions
+- Authentication: Server-side sessions with HTTP-only cookies
 - Deployment: Public HTTPS
 
-## Planned features
+## Current MVP
 
-- User registration, login, and logout
+- User registration, login, logout, and current-user lookup
 - Session-based authentication
-- Create, view, update, and delete tasks
-- Mark tasks as complete
-- Search, filtering, and sorting
-- Task priorities
+- Task CRUD
+- Explicit task completion
+- Search, filtering, sorting, and pagination
 - Due dates
-- Categories/tags
+- Categories
 - Per-user task isolation
+- Soft deletion
+
+Task priority is deliberately outside the current MVP contract.
 
 ## Project structure
 
@@ -30,6 +32,12 @@ A clean, multi-user Todo application built for the HNG 15 Internship and designe
 todo-list/
 ├── backend/
 │   ├── app/
+│   │   ├── __init__.py
+│   │   ├── auth.py
+│   │   ├── errors.py
+│   │   ├── extensions.py
+│   │   ├── models.py
+│   │   └── tasks.py
 │   ├── tests/
 │   ├── requirements.txt
 │   └── run.py
@@ -39,12 +47,69 @@ todo-list/
 │       ├── pages/
 │       ├── services/
 │       └── hooks/
+├── docs/
+│   ├── API_CONTRACT.md
+│   └── DATABASE_DESIGN.md
 ├── .env.example
 ├── .gitignore
 ├── AGENTS.md
 ├── README.md
 └── LICENSE
 ```
+
+## API
+
+Base path:
+
+```text
+/api
+```
+
+Authentication:
+
+```text
+POST /api/auth/register
+POST /api/auth/login
+POST /api/auth/logout
+GET  /api/auth/me
+```
+
+Tasks:
+
+```text
+GET    /api/tasks
+POST   /api/tasks
+GET    /api/tasks/<id>
+PATCH  /api/tasks/<id>
+DELETE /api/tasks/<id>
+PATCH  /api/tasks/<id>/complete
+```
+
+The complete request/response contract is documented in [docs/API_CONTRACT.md](docs/API_CONTRACT.md).
+
+## Local setup
+
+1. Create a Python virtual environment.
+2. Install backend dependencies:
+
+```bash
+cd backend
+python -m pip install -r requirements.txt
+```
+
+3. Create a local `.env` from `.env.example`.
+4. Set `DATABASE_URL` to a PostgreSQL database.
+5. Run the Flask application:
+
+```bash
+python run.py
+```
+
+The API will be available at `http://localhost:5000/api`.
+
+## Environment variables
+
+Copy `.env.example` to `.env` and replace placeholders. Never commit `.env` or production secrets.
 
 ## Development workflow
 
@@ -54,29 +119,17 @@ todo-list/
 - Keep commits small and descriptive.
 - Run relevant tests and checks before opening a pull request.
 
-## Local setup
+## Documentation
 
-The application is currently being scaffolded. Setup instructions will be expanded as implementation progresses.
-
-Expected architecture:
-
-```text
-React → Flask REST API → SQLAlchemy → PostgreSQL/Supabase
-```
-
-## Environment variables
-
-Copy `.env.example` to a local `.env` file and replace the placeholder values. Never commit `.env` or production secrets.
-
-## Project rules
-
-See [AGENTS.md](AGENTS.md) for the development, security, testing, architecture, and Git workflow rules.
+- [API Contract](docs/API_CONTRACT.md)
+- [Database Design](docs/DATABASE_DESIGN.md)
+- [Agent rules](AGENTS.md)
 
 ## Status
 
-**Stage:** Initial project scaffolding
+**Stage:** API contract defined and Flask endpoint foundation implemented.
 
-The first implementation milestone is a working Flask backend with a basic health/hello endpoint. Database models and authentication will follow incrementally.
+The next implementation work is database migrations, automated tests, frontend API integration, and deployment configuration.
 
 ## License
 
