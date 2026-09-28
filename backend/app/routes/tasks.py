@@ -193,11 +193,14 @@ def create_task():
         db.session.commit()
     except IntegrityError as exc:
         db.session.rollback()
-        raise ApiError(
-            "TASK_TITLE_ALREADY_EXISTS",
-            "An active task with this title already exists.",
-            409,
-        ) from exc
+        constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+        if constraint_name == "uq_active_task_title_per_user":
+            raise ApiError(
+                "TASK_TITLE_ALREADY_EXISTS",
+                "An active task with this title already exists.",
+                409,
+            ) from exc
+        raise
 
     return jsonify({"task": serialize_task(task)}), 201
 
@@ -238,11 +241,14 @@ def update_task(task_id):
         db.session.commit()
     except IntegrityError as exc:
         db.session.rollback()
-        raise ApiError(
-            "TASK_TITLE_ALREADY_EXISTS",
-            "An active task with this title already exists.",
-            409,
-        ) from exc
+        constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+        if constraint_name == "uq_active_task_title_per_user":
+            raise ApiError(
+                "TASK_TITLE_ALREADY_EXISTS",
+                "An active task with this title already exists.",
+                409,
+            ) from exc
+        raise
 
     return jsonify({"task": serialize_task(task)}), 200
 
