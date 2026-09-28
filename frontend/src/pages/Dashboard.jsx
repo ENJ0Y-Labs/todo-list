@@ -71,12 +71,25 @@ function TaskRow({ task, busy, onComplete, onEdit, onDelete }) {
 
   async function save() {
     const category = knownCategory === "Other" ? draft.customCategory.trim() : draft.category.trim();
-    await onEdit(task.id, {
-      title: draft.title.trim(),
-      description: draft.description.trim() || null,
-      category: category || null,
-      due_at: draft.due_at ? new Date(draft.due_at).toISOString() : null,
-    });
+    const originalCategory = task.category || null;
+    const nextCategory = category || null;
+    const originalDescription = task.description || null;
+    const nextDescription = draft.description.trim() || null;
+    const originalDueAt = task.due_at ? new Date(task.due_at).toISOString() : null;
+    const nextDueAt = draft.due_at ? toUtcISOString(draft.due_at) : null;
+    const payload = {};
+
+    if (draft.title.trim() !== task.title) payload.title = draft.title.trim();
+    if (nextDescription !== originalDescription) payload.description = nextDescription;
+    if (nextCategory !== originalCategory) payload.category = nextCategory;
+    if (nextDueAt !== originalDueAt) payload.due_at = nextDueAt;
+
+    if (!Object.keys(payload).length) {
+      setEditing(false);
+      return;
+    }
+
+    await onEdit(task.id, payload);
     setEditing(false);
   }
 
