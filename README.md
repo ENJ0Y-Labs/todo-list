@@ -9,75 +9,102 @@ A clean, multi-user Todo application built for the HNG 15 Internship and designe
 - API: REST + JSON
 - ORM: SQLAlchemy
 - Database: PostgreSQL via Supabase
-- Authentication: Server-side sessions
+- Authentication: Server-side sessions with HTTP-only cookies
 - Deployment: Public HTTPS
 
-## Planned features
+## MVP features
 
-- User registration, login, and logout
+- User registration, login, logout, and current-user lookup
 - Session-based authentication
-- Create, view, update, and delete tasks
-- Mark tasks as complete
-- Search, filtering, and sorting
-- Task priorities
+- Task CRUD
+- Explicit task completion/incompletion
+- Search, filtering, sorting, and pagination
 - Due dates
-- Categories/tags
+- Free-form categories
 - Per-user task isolation
+- Soft deletion
+
+Priority is intentionally excluded from the current database/API MVP.
+
+## API
+
+Base path: /api
+
+Authentication:
+- POST /api/auth/register
+- POST /api/auth/login
+- POST /api/auth/logout
+- GET /api/auth/me
+
+Tasks:
+- GET /api/tasks
+- POST /api/tasks
+- GET /api/tasks/<id>
+- PATCH /api/tasks/<id>
+- DELETE /api/tasks/<id>
+- PATCH /api/tasks/<id>/complete
+
+The complete request/response contract is documented in docs/API_CONTRACT.md.
 
 ## Project structure
 
-```text
 todo-list/
-├── backend/
-│   ├── app/
-│   ├── tests/
-│   ├── requirements.txt
-│   └── run.py
-├── frontend/
-│   └── src/
-│       ├── components/
-│       ├── pages/
-│       ├── services/
-│       └── hooks/
-├── .env.example
-├── .gitignore
-├── AGENTS.md
-├── README.md
-└── LICENSE
-```
-
-## Development workflow
-
-- `main` is the stable branch.
-- `dev` is the integration branch.
-- Create focused feature branches from `dev`.
-- Keep commits small and descriptive.
-- Run relevant tests and checks before opening a pull request.
+  backend/
+    app/
+      routes/
+        auth.py
+        tasks.py
+      errors.py
+      extensions.py
+      models.py
+      utils.py
+    tests/
+    requirements.txt
+    run.py
+  frontend/
+    src/
+      components/
+      pages/
+      services/
+        api.js
+      hooks/
+  docs/
+    API_CONTRACT.md
+    DATABASE_DESIGN.md
+  .env.example
+  .gitignore
+  AGENTS.md
+  README.md
+  LICENSE
 
 ## Local setup
 
-The application is currently being scaffolded. Setup instructions will be expanded as implementation progresses.
+Backend:
 
-Expected architecture:
+  cd backend
+  python -m venv .venv
+  .venv\\Scripts\\Activate.ps1
+  pip install -r requirements.txt
+  python run.py
 
-```text
-React → Flask REST API → SQLAlchemy → PostgreSQL/Supabase
-```
+Set the variables in .env before running the backend. The backend expects PostgreSQL.
 
-## Environment variables
+The frontend API client uses credentials: include so the browser sends the server-side session cookie.
 
-Copy `.env.example` to a local `.env` file and replace the placeholder values. Never commit `.env` or production secrets.
+## Development workflow
 
-## Project rules
-
-See [AGENTS.md](AGENTS.md) for the development, security, testing, architecture, and Git workflow rules.
+- main is stable.
+- Use focused feature branches.
+- Keep commits small and descriptive.
+- Review the diff before merging.
+- Run relevant tests and checks before opening a pull request.
 
 ## Status
 
-**Stage:** Initial project scaffolding
+Stage: API contract + backend endpoint implementation
 
-The first implementation milestone is a working Flask backend with a basic health/hello endpoint. Database models and authentication will follow incrementally.
+Next milestone: database migrations, automated API tests, and frontend integration.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See LICENSE.
