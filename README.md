@@ -27,6 +27,44 @@ A clean, multi-user Todo application built for the HNG 15 Internship and designe
 
 Priority is intentionally excluded from the current database/API MVP.
 
+## Local setup
+
+Backend:
+
+  cd backend
+  python -m venv .venv
+  .venv\\Scripts\\Activate.ps1
+  pip install -r requirements.txt
+
+Create a backend .env from the root .env.example, configure SECRET_KEY and DATABASE_URL, then apply the schema:
+
+  psql "$DATABASE_URL" -f migrations/001_initial_schema.sql
+
+Start the development server:
+
+  python run.py
+
+Frontend:
+
+  cd frontend
+  npm install
+  npm run dev
+
+Create frontend/.env from frontend/.env.example when the API URL differs from the default.
+
+## Testing
+
+Backend tests require PostgreSQL and TEST_DATABASE_URL:
+
+  cd backend
+  python -m pytest -q
+
+Frontend:
+
+  cd frontend
+  npm test
+  npm run build
+
 ## API
 
 Base path: /api
@@ -45,59 +83,20 @@ Tasks:
 - DELETE /api/tasks/<id>
 - PATCH /api/tasks/<id>/complete
 
-Project documentation is maintained in docs/README.md, with dedicated documents for the API contract, database design, architecture, frontend, testing, deployment, and product scope.
+Health:
+- GET /api/health
 
-## Project structure
+See docs/API_CONTRACT.md for the complete request and response contract.
 
-todo-list/
-  backend/
-    app/
-      routes/
-        auth.py
-        tasks.py
-      errors.py
-      extensions.py
-      models.py
-      utils.py
-    tests/
-    requirements.txt
-    run.py
-  frontend/
-    src/
-      components/
-      pages/
-      services/
-        api.js
-      hooks/
-  docs/
-    API_CONTRACT.md
-    DATABASE_DESIGN.md
-  .env.example
-  .gitignore
-  AGENTS.md
-  README.md
-  LICENSE
+## Production
 
-## Local setup
+The application uses a server-side CacheLib filesystem session store for the MVP. Production deployments must use persistent session storage. For horizontal scaling, use a shared store such as Redis.
 
-Backend:
+Use Gunicorn rather than Flask's development server:
 
-  cd backend
-  python -m venv .venv
-  .venv\\Scripts\\Activate.ps1
-  pip install -r requirements.txt
-  python run.py
+  gunicorn --chdir backend run:app
 
-Set the variables in .env before running the backend. The backend expects PostgreSQL.
-
-To run the backend API tests locally, create a PostgreSQL database and set TEST_DATABASE_URL, then run:
-
-  cd backend
-  python -m pytest -q
-
-The test suite intentionally uses PostgreSQL and does not fall back to SQLite.
-
-The frontend API client uses credentials: include so the browser sends the server-side session cookie.
+See docs/DEPLOYMENT.md for the full deployment checklist.
 
 ## Development workflow
 
@@ -109,9 +108,9 @@ The frontend API client uses credentials: include so the browser sends the serve
 
 ## Status
 
-Stage: API contract + backend endpoint implementation + PostgreSQL API test baseline
+Stage: MVP implementation with database migration, backend integration tests, frontend integration, and CI coverage.
 
-Next milestone: database migrations and frontend integration.
+The repository is intended to be runnable from a clean PostgreSQL database after applying the migration.
 
 ## License
 
