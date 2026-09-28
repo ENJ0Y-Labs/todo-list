@@ -158,6 +158,8 @@ Rules:
 - Category may be null and is limited to 100 characters.
 - due_at may be null but cannot be in the past.
 - Active task titles must be unique per user.
+- Unknown request fields are rejected with 400 VALIDATION_ERROR.
+- The `completed` field cannot be supplied when creating or updating task content; use the completion endpoint.
 
 Response: 201 Created
 
@@ -185,7 +187,11 @@ Supported query parameters:
 | sort | title, due_at, created_at, updated_at | created_at |
 | order | asc, desc | desc |
 
-search checks title, description, and category.
+search checks title, description, and category using case-insensitive substring matching.
+
+Category filtering is case-insensitive.
+
+When sorting by `due_at`, tasks without a due date are always placed after tasks with due dates, for both ascending and descending order.
 
 Response: 200 OK
 
@@ -228,6 +234,8 @@ Not allowed:
 - updated_at
 
 Completion has its own endpoint.
+
+An empty PATCH body is invalid and returns 400 VALIDATION_ERROR.
 
 Response: 200 OK with the updated task.
 

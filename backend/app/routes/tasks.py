@@ -10,10 +10,14 @@ from ..utils import parse_iso_datetime, require_auth, serialize_task
 tasks_bp = Blueprint("tasks", __name__)
 
 MAX_DESCRIPTION_LENGTH = 5000
+CREATE_ALLOWED_FIELDS = {"title", "description", "due_at", "category"}
+UPDATE_ALLOWED_FIELDS = CREATE_ALLOWED_FIELDS
 
 
 def _task_payload(required_title=False):
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if data is None:
+        data = {}
     if not isinstance(data, dict):
         raise ApiError("VALIDATION_ERROR", "Request body must be a JSON object.", 400)
 
@@ -87,7 +91,7 @@ def list_tasks():
 
     category = request.args.get("category")
     if category:
-        query = query.where(Task.category == category.strip())
+        query = query.where(Task.category.ilike(category.strip()))
 
     due_after = request.args.get("due_after")
     if due_after:
@@ -121,7 +125,13 @@ def list_tasks():
         raise ApiError("VALIDATION_ERROR", "order must be asc or desc.", 400)
 
     column = sort_columns[sort]
-    query = query.order_by((asc(column) if order == "asc" else desc(column)))
+    if sort == "due_at":
+        query = query.order_by(
+            column.is_(None).asc(),
+            asc(column) if order == "asc" else desc(column),
+        )
+    else:
+        query = query.order_by(asc(column) if order == "asc" else desc(column))
     query = query.offset((page - 1) * per_page).limit(per_page)
 
     tasks = db.session.scalars(query).all()
@@ -138,7 +148,7 @@ def list_tasks():
     if completed is not None:
         count_query = count_query.where(Task.completed == (completed.lower() == "true"))
     if category:
-        count_query = count_query.where(Task.category == category.strip())
+        count_query = count_query.where(Task.category.ilike(category.strip()))
     if due_after:
         count_query = count_query.where(Task.due_at >= parse_iso_datetime(due_after, "due_after"))
     if due_before:
@@ -161,6 +171,13 @@ def list_tasks():
 @require_auth
 def create_task():
     data = _task_payload(required_title=True)
+    unexpected = set(data) - CREATE_ALLOWED_FIELDS
+    if unexpected:
+        raise ApiError(
+            "VALIDATION_ERROR",
+            "Unsupported fields: " + ", ".join(sorted(unexpected)) + ".",
+            400,
+        )
 
     task = Task(
         user_id=g.current_user.id,
@@ -176,11 +193,14 @@ def create_task():
         db.session.commit()
     except IntegrityError as exc:
         db.session.rollback()
-        raise ApiError(
-            "TASK_TITLE_ALREADY_EXISTS",
-            "An active task with this title already exists.",
-            409,
-        ) from exc
+        constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+        if constraint_name == "uq_active_task_title_per_user":
+            raise ApiError(
+                "TASK_TITLE_ALREADY_EXISTS",
+                "An active task with this title already exists.",
+                409,
+            ) from exc
+        raise
 
     return jsonify({"task": serialize_task(task)}), 201
 
@@ -197,8 +217,10 @@ def update_task(task_id):
     task = _get_task_or_404(task_id)
     data = _task_payload()
 
-    allowed = {"title", "description", "due_at", "category"}
-    unexpected = set(data) - allowed
+    if not data:
+        raise ApiError("VALIDATION_ERROR", "At least one supported field is required.", 400)
+
+    unexpected = set(data) - UPDATE_ALLOWED_FIELDS
     if unexpected:
         raise ApiError(
             "VALIDATION_ERROR",
@@ -219,11 +241,14 @@ def update_task(task_id):
         db.session.commit()
     except IntegrityError as exc:
         db.session.rollback()
-        raise ApiError(
-            "TASK_TITLE_ALREADY_EXISTS",
-            "An active task with this title already exists.",
-            409,
-        ) from exc
+        constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+        if constraint_name == "uq_active_task_title_per_user":
+            raise ApiError(
+                "TASK_TITLE_ALREADY_EXISTS",
+                "An active task with this title already exists.",
+                409,
+            ) from exc
+        raise
 
     return jsonify({"task": serialize_task(task)}), 200
 
