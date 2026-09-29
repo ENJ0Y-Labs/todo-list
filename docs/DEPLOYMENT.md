@@ -45,7 +45,11 @@ Required backend values:
 
 Backend tests require TEST_DATABASE_URL.
 
-Frontend uses VITE_API_BASE_URL from frontend/.env.
+For the Vercel production deployment, set:
+
+VITE_API_BASE_URL=/api
+
+This value is baked into the frontend at build time, so redeploy Vercel after changing it.
 
 ## Database migrations
 
@@ -59,9 +63,13 @@ The migration creates users, tasks, indexes, and constraints. The application do
 
 ## Production topology
 
-Browser -> HTTPS frontend -> HTTPS Flask API -> PostgreSQL
+The production frontend uses a Vercel rewrite so browser API requests remain same-origin:
 
-A same-site arrangement such as app.example.com and api.example.com is recommended because it simplifies cookie behavior.
+Browser -> Vercel frontend (/api) -> Render Flask API -> PostgreSQL
+
+frontend/vercel.json proxies /api/* to the Render backend and rewrites other paths to /index.html so React Router routes such as /dashboard work on refresh.
+
+The frontend API base URL must therefore be /api in Vercel.
 
 ## Server-side sessions
 
@@ -69,9 +77,14 @@ Authentication uses server-side sessions backed by CacheLib's filesystem store f
 
 Set SESSION_FILE_DIR to a persistent directory in production. For multiple backend instances, replace the filesystem store with a shared CacheLib/Redis store before scaling horizontally.
 
-For production HTTPS, set SESSION_COOKIE_SECURE=true.
+For the Vercel same-origin proxy deployment, use:
 
-For same-site frontend/API deployment, SameSite=Lax should generally remain enabled.
+SESSION_COOKIE_SECURE=true
+SESSION_COOKIE_SAMESITE=Lax
+
+Keep CORS restricted to the real frontend origin when the backend is also directly reachable:
+
+CORS_ORIGINS=https://todo-list-murex-chi.vercel.app
 
 For genuinely cross-site frontend/API deployment, SameSite=None and Secure are required for the cookie. Add explicit CSRF protection before allowing state-changing cross-site requests.
 
@@ -94,8 +107,8 @@ The application reads FLASK_DEBUG=0 by default. Never enable the Werkzeug debugg
 - [ ] Persistent server-side session storage configured.
 - [ ] Secure HTTP-only cookie enabled.
 - [ ] CORS restricted to the real frontend origin.
-- [ ] CSRF protection added for cross-site state-changing requests.
-- [ ] Frontend API URL points to production.
+- [ ] Frontend Vercel API URL is /api.
+- [ ] Vercel deployment uses frontend/vercel.json.
 - [ ] No secrets committed.
 - [ ] Backend tests pass.
 - [ ] Frontend tests pass.
