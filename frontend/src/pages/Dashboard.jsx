@@ -1,116 +1,151 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAuth } from "../context/AuthContext";
-import { api } from "../services/api";
+import { useMemo, useState } from "react";
 
+const STORAGE_KEY = "hng15-todo-stage1";
 const CATEGORIES = ["Work", "Personal", "School", "Shopping", "Health", "Finance", "Other"];
-const DEFAULT_FILTERS = {
-  search: "", completed: "", category: "", due_after: "", due_before: "",
-  sort: "created_at", order: "desc", page: 1,
-};
 
-function messageFor(error) {
-  const messages = {
-    TASK_TITLE_ALREADY_EXISTS: "An active task with that title already exists.",
-    RESOURCE_NOT_FOUND: "That task is no longer available.",
-    AUTHENTICATION_REQUIRED: "Your session has expired. Please sign in again.",
-    VALIDATION_ERROR: error?.message,
-  };
-  return messages[error?.code] || error?.message || "Something went wrong.";
+const SAMPLE_TASKS = [
+  {
+    id: "sample-1",
+    title: "Finish Stage 1 submission",
+    description: "Verify the public deployment and submit the final link.",
+    category: "Work",
+    due_at: new Date(Date.now() + 86400000).toISOString(),
+    completed: false,
+  },
+  {
+    id: "sample-2",
+    title: "Review project documentation",
+    description: "Check the README and deployment notes before submission.",
+    category: "School",
+    due_at: new Date(Date.now() + 172800000).toISOString(),
+    completed: false,
+  },
+  {
+    id: "sample-3",
+    title: "Clean up task list",
+    description: "Archive anything that is no longer relevant.",
+    category: "Personal",
+    due_at: null,
+    completed: true,
+  },
+  {
+    id: "sample-4",
+    title: "Plan next week's priorities",
+    description: "Write down the three most important outcomes for next week.",
+    category: "Work",
+    due_at: new Date(Date.now() + 604800000).toISOString(),
+    completed: false,
+  },
+];
+
+function readTasks() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeTasks(tasks) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+}
+
+function newId() {
+  return crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random());
 }
 
 function toLocalDateTime(value) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
 }
 
 function toUtcISOString(value) {
-  if (!value) return "";
+  if (!value) return null;
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function formatDue(value) {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime())
-    ? "Invalid due date"
+    ? null
     : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
 function Summary({ label, value, icon }) {
-  return <article className="summary-card"><span>{label}</span><strong>{value}</strong><i className={"fa-solid " + icon} /></article>;
+  return (
+    <article className="summary-card">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <i className={"fa-solid " + icon} />
+    </article>
+  );
 }
 
-function TaskRow({ task, busy, onComplete, onEdit, onDelete }) {
+function TaskRow({ task, onComplete, onEdit, onDelete }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(() => {
-    const custom = task.category && !CATEGORIES.includes(task.category);
-    return {
-      title: task.title,
-      description: task.description || "",
-      category: custom ? "Other" : task.category || "",
-      customCategory: custom ? task.category : "",
-      due_at: toLocalDateTime(task.due_at),
-    };
+  const [draft, setDraft] = useState({
+    title: task.title,
+    description: task.description || "",
+    category: task.category || "",
+    due_at: toLocalDateTime(task.due_at),
   });
 
-  useEffect(() => {
-    const custom = task.category && !CATEGORIES.includes(task.category);
-    setDraft({
-      title: task.title,
-      description: task.description || "",
-      category: custom ? "Other" : task.category || "",
-      customCategory: custom ? task.category : "",
-      due_at: toLocalDateTime(task.due_at),
+  function save() {
+    const title = draft.title.trim();
+    if (!title) return;
+    onEdit(task.id, {
+      ...task,
+      title,
+      description: draft.description.trim(),
+      category: draft.category.trim(),
+      due_at: toUtcISOString(draft.due_at),
     });
-  }, [task]);
-
-  const knownCategory = CATEGORIES.includes(draft.category) ? draft.category : draft.category ? "Other" : "";
-
-  async function save() {
-    const category = knownCategory === "Other" ? draft.customCategory.trim() : draft.category.trim();
-    const originalCategory = task.category || null;
-    const nextCategory = category || null;
-    const originalDescription = task.description || null;
-    const nextDescription = draft.description.trim() || null;
-    const originalDueAt = task.due_at ? new Date(task.due_at).toISOString() : null;
-    const nextDueAt = draft.due_at ? toUtcISOString(draft.due_at) : null;
-    const payload = {};
-
-    if (draft.title.trim() !== task.title) payload.title = draft.title.trim();
-    if (nextDescription !== originalDescription) payload.description = nextDescription;
-    if (nextCategory !== originalCategory) payload.category = nextCategory;
-    if (nextDueAt !== originalDueAt) payload.due_at = nextDueAt;
-
-    if (!Object.keys(payload).length) {
-      setEditing(false);
-      return;
-    }
-
-    await onEdit(task.id, payload);
     setEditing(false);
   }
 
   if (editing) {
     return (
       <article className="task-card editing">
-        <input className="edit-title" aria-label="Task title" maxLength="255" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
-        <textarea rows="3" maxLength="5000" aria-label="Task description" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+        <input
+          className="edit-title"
+          aria-label="Task title"
+          maxLength="255"
+          value={draft.title}
+          onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+        />
+        <textarea
+          rows="3"
+          maxLength="5000"
+          aria-label="Task description"
+          value={draft.description}
+          onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+        />
         <div className="inline-edit-row">
-          <select aria-label="Task category" value={knownCategory} onChange={(e) => setDraft({ ...draft, category: e.target.value, customCategory: "" })}>
+          <select
+            aria-label="Task category"
+            value={draft.category}
+            onChange={(e) => setDraft({ ...draft, category: e.target.value })}
+          >
             <option value="">No category</option>
             {CATEGORIES.map((category) => <option key={category}>{category}</option>)}
           </select>
-          <input type="datetime-local" aria-label="Task due date" value={draft.due_at} onChange={(e) => setDraft({ ...draft, due_at: e.target.value })} />
+          <input
+            type="datetime-local"
+            aria-label="Task due date"
+            value={draft.due_at}
+            onChange={(e) => setDraft({ ...draft, due_at: e.target.value })}
+          />
         </div>
-        {knownCategory === "Other" && (
-          <input maxLength="100" aria-label="Custom category" placeholder="Custom category" value={draft.customCategory} onChange={(e) => setDraft({ ...draft, customCategory: e.target.value })} />
-        )}
         <div className="task-actions">
           <button className="secondary-button" type="button" onClick={() => setEditing(false)}>Cancel</button>
-          <button className="primary-button" type="button" disabled={busy} onClick={save}>Save</button>
+          <button className="primary-button" type="button" onClick={save}>Save</button>
         </div>
       </article>
     );
@@ -118,7 +153,12 @@ function TaskRow({ task, busy, onComplete, onEdit, onDelete }) {
 
   return (
     <article className="task-card">
-      <button className={"check-button" + (task.completed ? " completed" : "")} type="button" disabled={busy} onClick={() => onComplete(task.id, !task.completed)} aria-label={(task.completed ? "Reopen " : "Complete ") + task.title}>
+      <button
+        className={"check-button" + (task.completed ? " completed" : "")}
+        type="button"
+        onClick={() => onComplete(task.id, !task.completed)}
+        aria-label={(task.completed ? "Reopen " : "Complete ") + task.title}
+      >
         <i className={task.completed ? "fa-solid fa-circle-check" : "fa-regular fa-circle"} />
       </button>
       <div className={"task-content" + (task.completed ? " completed" : "")}>
@@ -130,25 +170,31 @@ function TaskRow({ task, busy, onComplete, onEdit, onDelete }) {
         </div>
       </div>
       <div className="task-actions">
-        <button className="icon-button" type="button" disabled={busy} onClick={() => setEditing(true)} aria-label={"Edit " + task.title}><i className="fa-solid fa-pen" /></button>
-        <button className="icon-button danger" type="button" disabled={busy} onClick={() => onDelete(task)} aria-label={"Delete " + task.title}><i className="fa-solid fa-trash" /></button>
+        <button className="icon-button" type="button" onClick={() => setEditing(true)} aria-label={"Edit " + task.title}>
+          <i className="fa-solid fa-pen" />
+        </button>
+        <button className="icon-button danger" type="button" onClick={() => onDelete(task)} aria-label={"Delete " + task.title}>
+          <i className="fa-solid fa-trash" />
+        </button>
       </div>
     </article>
   );
 }
 
-function TaskModal({ onClose, onSubmit, busy, error }) {
-  const [form, setForm] = useState({ title: "", description: "", category: "", customCategory: "", due_at: "" });
+function TaskModal({ onClose, onSubmit }) {
+  const [form, setForm] = useState({ title: "", description: "", category: "", due_at: "" });
   const update = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
   function submit(event) {
     event.preventDefault();
-    const category = form.category === "Other" ? form.customCategory.trim() : form.category.trim();
+    if (!form.title.trim()) return;
     onSubmit({
+      id: newId(),
       title: form.title.trim(),
-      description: form.description.trim() || null,
-      category: category || null,
-      due_at: form.due_at ? new Date(form.due_at).toISOString() : null,
+      description: form.description.trim(),
+      category: form.category.trim(),
+      due_at: toUtcISOString(form.due_at),
+      completed: false,
     });
   }
 
@@ -170,11 +216,9 @@ function TaskModal({ onClose, onSubmit, busy, error }) {
           </label>
           <label>Due date and time<input type="datetime-local" value={form.due_at} onChange={(e) => update("due_at", e.target.value)} /></label>
         </div>
-        {form.category === "Other" && <label>Custom category<input maxLength="100" value={form.customCategory} onChange={(e) => update("customCategory", e.target.value)} /></label>}
-        {error && <p className="form-error" role="alert">{error}</p>}
         <div className="modal-actions">
           <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
-          <button className="primary-button" disabled={busy}>{busy ? "Creating..." : "Create task"}</button>
+          <button className="primary-button">Create task</button>
         </div>
       </form>
     </div>
@@ -182,195 +226,166 @@ function TaskModal({ onClose, onSubmit, busy, error }) {
 }
 
 export default function Dashboard() {
-  const { user, logout } = useAuth();
-  const [tasks, setTasks] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, per_page: 20, total: 0, total_pages: 0 });
-  const [summary, setSummary] = useState({ total: 0, completed: 0, pending: 0 });
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
-  const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState(null);
+  const [tasks, setTasks] = useState(readTasks);
+  const [filters, setFilters] = useState({
+    search: "", completed: "", category: "", sort: "created_at", order: "desc",
+  });
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalBusy, setModalBusy] = useState(false);
-  const [modalError, setModalError] = useState("");
   const [toast, setToast] = useState(null);
 
-  const notify = useCallback((message, type = "error") => {
+  function persist(nextTasks) {
+    setTasks(nextTasks);
+    writeTasks(nextTasks);
+  }
+
+  function notify(message, type = "success") {
     setToast({ message, type });
-    window.setTimeout(() => setToast(null), 3500);
-  }, []);
+    window.setTimeout(() => setToast(null), 3000);
+  }
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: String(filters.page),
-        per_page: "20",
-        sort: filters.sort,
-        order: filters.order,
-      });
-      ["search", "completed", "category", "due_after", "due_before"].forEach((key) => {
-        if (!filters[key]) return;
-        const value = key === "due_after" || key === "due_before"
-          ? toUtcISOString(filters[key])
-          : filters[key];
-        if (value) params.set(key, value);
-      });
+  function updateFilter(key, value) {
+    setFilters((current) => ({ ...current, [key]: value }));
+  }
 
-      const [list, total, completed, pending] = await Promise.all([
-        api.listTasks(params.toString()),
-        api.listTasks("page=1&per_page=1"),
-        api.listTasks("page=1&per_page=1&completed=true"),
-        api.listTasks("page=1&per_page=1&completed=false"),
-      ]);
+  function loadSampleData() {
+    persist(SAMPLE_TASKS.map((task) => ({ ...task })));
+    notify("Sample data loaded.");
+  }
 
-      setTasks(list.tasks || []);
-      setPagination(list.pagination);
-      setSummary({
-        total: total.pagination.total,
-        completed: completed.pagination.total,
-        pending: pending.pagination.total,
-      });
-    } catch (error) {
-      notify(messageFor(error));
-    } finally {
-      setLoading(false);
-    }
-  }, [filters, notify]);
+  function clearTasks() {
+    persist([]);
+    notify("Task list cleared.");
+  }
 
-  useEffect(() => {
-    const delay = filters.search ? 300 : 0;
-    const timer = window.setTimeout(load, delay);
-    return () => window.clearTimeout(timer);
-  }, [load, filters.search]);
+  function createTask(task) {
+    persist([task, ...tasks]);
+    setModalOpen(false);
+    notify("Task created.");
+  }
+
+  function completeTask(id, completed) {
+    persist(tasks.map((task) => task.id === id ? { ...task, completed } : task));
+    notify(completed ? "Task completed." : "Task reopened.");
+  }
+
+  function updateTask(id, updated) {
+    persist(tasks.map((task) => task.id === id ? updated : task));
+    notify("Task updated.");
+  }
+
+  function deleteTask(task) {
+    if (!window.confirm('Delete "' + task.title + '"?')) return;
+    persist(tasks.filter((item) => item.id !== task.id));
+    notify("Task deleted.");
+  }
 
   const categories = useMemo(() => {
-    const taskCategories = tasks.map((task) => task.category).filter(Boolean);
-    return [...new Set([...CATEGORIES.filter((c) => c !== "Other"), ...taskCategories])].sort();
+    return [...new Set(tasks.map((task) => task.category).filter(Boolean))].sort();
   }, [tasks]);
 
-  function setFilter(key, value) {
-    setFilters((current) => ({ ...current, [key]: value, page: key === "page" ? value : 1 }));
-  }
+  const filteredTasks = useMemo(() => {
+    const search = filters.search.trim().toLowerCase();
+    const result = tasks.filter((task) => {
+      const matchesSearch = !search || [task.title, task.description, task.category]
+        .some((value) => value?.toLowerCase().includes(search));
+      const matchesStatus = !filters.completed || String(task.completed) === filters.completed;
+      const matchesCategory = !filters.category || task.category === filters.category;
+      return matchesSearch && matchesStatus && matchesCategory;
+    });
 
-  async function createTask(payload) {
-    setModalBusy(true);
-    setModalError("");
-    try {
-      await api.createTask(payload);
-      setModalOpen(false);
-      notify("Task created.", "success");
-      await load();
-    } catch (error) {
-      setModalError(messageFor(error));
-    } finally {
-      setModalBusy(false);
-    }
-  }
+    result.sort((a, b) => {
+      let comparison = 0;
+      if (filters.sort === "title") comparison = a.title.localeCompare(b.title);
+      if (filters.sort === "created_at") comparison = String(a.id).localeCompare(String(b.id));
+      if (filters.sort === "due_at") comparison = (a.due_at || "9999").localeCompare(b.due_at || "9999");
+      if (filters.order === "desc") comparison *= -1;
+      return comparison;
+    });
+    return result;
+  }, [tasks, filters]);
 
-  async function completeTask(id, completed) {
-    setBusyId(id);
-    try {
-      await api.setTaskCompleted(id, completed);
-      notify(completed ? "Task completed." : "Task reopened.", "success");
-      await load();
-    } catch (error) {
-      notify(messageFor(error));
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function updateTask(id, payload) {
-    setBusyId(id);
-    try {
-      await api.updateTask(id, payload);
-      notify("Task updated.", "success");
-      await load();
-    } catch (error) {
-      notify(messageFor(error));
-      throw error;
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function deleteTask(task) {
-    if (!window.confirm('Delete "' + task.title + '"?')) return;
-    setBusyId(task.id);
-    try {
-      await api.deleteTask(task.id);
-      notify("Task deleted.", "success");
-      await load();
-    } catch (error) {
-      notify(messageFor(error));
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function signOut() {
-    try {
-      await logout();
-    } catch (error) {
-      notify(messageFor(error));
-    }
-  }
+  const completedCount = tasks.filter((task) => task.completed).length;
+  const pendingCount = tasks.length - completedCount;
 
   return (
     <div className="app-shell">
       <header className="app-header">
         <div className="brand"><span className="brand-mark"><i className="fa-solid fa-check" /></span>Todo List</div>
         <div className="header-user">
-          <div className="user-copy"><strong>{user?.fullname || user?.username}</strong><span>@{user?.username}</span></div>
-          <button className="secondary-button logout-button" type="button" onClick={signOut}><i className="fa-solid fa-right-from-bracket" /> Logout</button>
+          <div className="user-copy"><strong>Stage 1 Demo</strong><span>Local workspace</span></div>
+          <button className="secondary-button logout-button" type="button" onClick={loadSampleData}>
+            <i className="fa-solid fa-wand-magic-sparkles" /> Load sample data
+          </button>
         </div>
       </header>
 
       <main className="dashboard">
         <div className="welcome">
-          <span className="eyebrow">Dashboard</span>
-          <h1>Good to see you, {user?.fullname?.split(" ")[0] || user?.username}.</h1>
-          <p>Keep the important work visible and the chaos contained.</p>
+          <span className="eyebrow">Public demo</span>
+          <h1>Your tasks, without the ceremony.</h1>
+          <p>Try every core todo feature directly in the browser. No account required.</p>
         </div>
 
         <section className="summary-grid" aria-label="Task summary">
-          <Summary label="Total tasks" value={summary.total} icon="fa-list-check" />
-          <Summary label="Completed" value={summary.completed} icon="fa-circle-check" />
-          <Summary label="Pending" value={summary.pending} icon="fa-clock" />
+          <Summary label="Total tasks" value={tasks.length} icon="fa-list-check" />
+          <Summary label="Completed" value={completedCount} icon="fa-circle-check" />
+          <Summary label="Pending" value={pendingCount} icon="fa-clock" />
         </section>
 
-        <div className="section-heading"><h2>Your tasks</h2><span>{pagination.total} matching task{pagination.total === 1 ? "" : "s"}</span></div>
+        <div className="section-heading">
+          <h2>Your tasks</h2>
+          <span>{filteredTasks.length} matching task{filteredTasks.length === 1 ? "" : "s"}</span>
+        </div>
 
         <section className="task-controls" aria-label="Task controls">
-          <div className="search-box"><i className="fa-solid fa-magnifying-glass" /><input aria-label="Search tasks" placeholder="Search tasks..." value={filters.search} onChange={(e) => setFilter("search", e.target.value)} /></div>
-          <select aria-label="Completion filter" value={filters.completed} onChange={(e) => setFilter("completed", e.target.value)}><option value="">All status</option><option value="false">Pending</option><option value="true">Completed</option></select>
-          <select aria-label="Category filter" value={filters.category} onChange={(e) => setFilter("category", e.target.value)}><option value="">All categories</option>{categories.map((category) => <option key={category}>{category}</option>)}</select>
-          <input type="datetime-local" aria-label="Due after" title="Due after" value={filters.due_after} onChange={(e) => setFilter("due_after", e.target.value)} />
-          <input type="datetime-local" aria-label="Due before" title="Due before" value={filters.due_before} onChange={(e) => setFilter("due_before", e.target.value)} />
-          <select aria-label="Sort tasks" value={filters.sort} onChange={(e) => setFilter("sort", e.target.value)}><option value="created_at">Created</option><option value="title">Title</option><option value="due_at">Due date</option><option value="updated_at">Updated</option></select>
-          <select aria-label="Sort order" value={filters.order} onChange={(e) => setFilter("order", e.target.value)}><option value="desc">Descending</option><option value="asc">Ascending</option></select>
-          <button className="primary-button" type="button" onClick={() => { setModalError(""); setModalOpen(true); }}><i className="fa-solid fa-plus" /> New task</button>
+          <div className="search-box">
+            <i className="fa-solid fa-magnifying-glass" />
+            <input aria-label="Search tasks" placeholder="Search tasks..." value={filters.search} onChange={(e) => updateFilter("search", e.target.value)} />
+          </div>
+          <select aria-label="Completion filter" value={filters.completed} onChange={(e) => updateFilter("completed", e.target.value)}>
+            <option value="">All status</option><option value="false">Pending</option><option value="true">Completed</option>
+          </select>
+          <select aria-label="Category filter" value={filters.category} onChange={(e) => updateFilter("category", e.target.value)}>
+            <option value="">All categories</option>{categories.map((category) => <option key={category}>{category}</option>)}
+          </select>
+          <select aria-label="Sort tasks" value={filters.sort} onChange={(e) => updateFilter("sort", e.target.value)}>
+            <option value="created_at">Created</option><option value="title">Title</option><option value="due_at">Due date</option>
+          </select>
+          <select aria-label="Sort order" value={filters.order} onChange={(e) => updateFilter("order", e.target.value)}>
+            <option value="desc">Descending</option><option value="asc">Ascending</option>
+          </select>
+          <button className="primary-button" type="button" onClick={() => setModalOpen(true)}>
+            <i className="fa-solid fa-plus" /> New task
+          </button>
         </section>
 
-        {loading ? (
-          <div className="spinner-wrap"><span className="spinner" aria-label="Loading tasks" /></div>
-        ) : tasks.length ? (
-          <div className="task-list">{tasks.map((task) => <TaskRow key={task.id} task={task} busy={busyId === task.id} onComplete={completeTask} onEdit={updateTask} onDelete={deleteTask} />)}</div>
+        {filteredTasks.length ? (
+          <div className="task-list">
+            {filteredTasks.map((task) => (
+              <TaskRow key={task.id} task={task} onComplete={completeTask} onEdit={updateTask} onDelete={deleteTask} />
+            ))}
+          </div>
         ) : (
-          <div className="empty-state"><i className="fa-regular fa-clipboard" /><h3>No tasks found</h3><p>Create a task or change your filters.</p></div>
+          <div className="empty-state">
+            <i className="fa-regular fa-clipboard" />
+            <h3>No tasks found</h3>
+            <p>Create a task or load the sample data to explore the app.</p>
+            <button className="secondary-button" type="button" onClick={loadSampleData}>Load sample data</button>
+          </div>
         )}
 
-        {!loading && pagination.total_pages > 1 && (
-          <nav className="pagination" aria-label="Task pagination">
-            <button className="secondary-button" disabled={pagination.page <= 1} onClick={() => setFilter("page", pagination.page - 1)}>Previous</button>
-            <span>Page {pagination.page} of {pagination.total_pages}</span>
-            <button className="secondary-button" disabled={pagination.page >= pagination.total_pages} onClick={() => setFilter("page", pagination.page + 1)}>Next</button>
-          </nav>
-        )}
+        <div className="pagination">
+          <button className="secondary-button" type="button" onClick={clearTasks} disabled={!tasks.length}>Clear all data</button>
+        </div>
       </main>
 
-      {modalOpen && <TaskModal onClose={() => setModalOpen(false)} onSubmit={createTask} busy={modalBusy} error={modalError} />}
-      {toast && <div className={"toast toast-" + toast.type} role="alert"><i className={"fa-solid " + (toast.type === "success" ? "fa-circle-check" : "fa-circle-exclamation")} />{toast.message}<button type="button" aria-label="Close notification" onClick={() => setToast(null)}>×</button></div>}
+      {modalOpen && <TaskModal onClose={() => setModalOpen(false)} onSubmit={createTask} />}
+      {toast && (
+        <div className={"toast toast-" + toast.type} role="alert">
+          <i className="fa-solid fa-circle-check" />{toast.message}
+          <button type="button" aria-label="Close notification" onClick={() => setToast(null)}>×</button>
+        </div>
+      )}
     </div>
   );
 }
